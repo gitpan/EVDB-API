@@ -1,5 +1,8 @@
 Revision history for EVDB::API
 
+0.6  Jun 2005
+  - Removed ._* files from tarball.
+
 0.5  Jun 2005
   - First publicly-available version.
   - Provides login() for digest (token) authentication. 
