@@ -8,7 +8,7 @@ EVDB::API - Perl interface to EVDB public API
 
   use EVDB::API;
   
-  my $evdb = EVDB::API->new(app_token => $app_token);
+  my $evdb = EVDB::API->new(app_key => $app_key);
   
   $evdb->login(user => 'harry', password => 'H0gwart$') 
     or die "Can't log in: $EVDB::API::errstr";
@@ -59,15 +59,16 @@ our $DEBUG = 0;
 
 our $default_api_server = 'http://api.evdb.com';
 
+our $errcode;
 our $errstr;
 
 =head1 CLASS METHODS
 
 =item C(new)
   
-  $evdb = EVDB::API->new(auth_token => $auth_token);
+  $evdb = EVDB::API->new(app_key => $app_key);
 
-Creates a new API object. Requires a valid app_token as provided by EVDB.
+Creates a new API object. Requires a valid app_key as provided by EVDB.
 
 =cut
 
@@ -79,10 +80,10 @@ sub new
   my %params = @_;
   my $self = 
   {
-    'app_token'   => $params{app_token},
+    'app_key'     => $params{app_key} || $params{app_token},
     'debug'       => $params{debug},
     'verbose'     => $params{verbose},
-    'auth_token'  => '',
+    'user_key'    => '',
     'api_root'    => $params{api_root} || $default_api_server,
   };
   
@@ -138,8 +139,8 @@ sub login
   
   my $r = $self->call('users/login', $params) or return;
   
-  # Store the provided auth_token.
-  $self->{auth_token} = $r->{auth_token};
+  # Store the provided user_key.
+  $self->{user_key} = $r->{user_key} || $r->{auth_token};
   
   return 1;
 }
@@ -148,7 +149,7 @@ sub login
 
   $xml_ref = $evdb->call($method, \%arguments, [$force_array]);
 
-Calls the specified method with the given arguments and any previous authentication information (including app_token).  Returns a data structure processed through XML::Simple.
+Calls the specified method with the given arguments and any previous authentication information (including app_key).  Returns a data structure processed through XML::Simple.
 
 =cut
 
@@ -165,9 +166,9 @@ sub call
 	print "Calling ($url)...\n" if $VERBOSE;
 	
 	# Add the standard arguments to the list.
-  $args->{app_token}  = $self->{app_token};
+  $args->{app_key}    = $self->{app_key};
   $args->{user}       = $self->{user};
-  $args->{auth_token} = $self->{auth_token};
+  $args->{user_key}   = $self->{user_key};
   
 	# Construct the POST data by encoding all the arguments.
 	my @postParts; 
@@ -189,7 +190,8 @@ sub call
 	my $response = $ua->request($request);
 	unless ($response->is_success) 
 	{
-		$errstr = $response->code . ': ' . $response->message;
+		$errcode = $response->code;
+		$errstr  = $response->code . ': ' . $response->message;
 		return undef;
 	}
 	
@@ -206,7 +208,8 @@ sub call
 	# Check for errors.
 	if ($data->{string})
 	{
-	  $errstr = $data->{string};
+	  $errcode = $data->{string};
+	  $errstr  = $data->{string} . ": " .$data->{description};
 	  print "\n", $xml, "\n" if $DEBUG;
 	  return undef;
 	}

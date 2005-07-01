@@ -1,5 +1,8 @@
 Revision history for EVDB::API
 
+0.7  Jun 2005
+  - Updated to match changes to API user_key and app_key.
+
 0.6  Jun 2005
   - Removed ._* files from tarball.
 
