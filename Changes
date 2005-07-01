@@ -1,5 +1,10 @@
 Revision history for EVDB::API
 
+0.8  Jul 2005
+  - Improved error handling.  $EVDB::API::errcode now provides
+    the machine-readable error, while $EVDB::API::errstr
+    provides a human-readable description.
+
 0.7  Jun 2005
   - Updated to match changes to API user_key and app_key.
 

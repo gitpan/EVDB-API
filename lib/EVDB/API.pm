@@ -48,11 +48,11 @@ use Digest::MD5 qw(md5_hex);
 
 =head1 VERSION
 
-0.6 - June 2005
+0.8 - July 2005
 
 =cut
 
-our $VERSION = 0.6;
+our $VERSION = 0.8;
 
 our $VERBOSE = 0;
 our $DEBUG = 0;
