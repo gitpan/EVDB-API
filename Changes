@@ -1,5 +1,13 @@
 Revision history for EVDB::API
 
+0.9  Jul 2005
+  - Updated call() to accept file upload fields.  Specifically, any parameter
+    that ends with "_file" will be treated as a local filename and uploaded
+    along with the method call.
+  - call() now accepts either a hash reference (as before) or an array
+    reference (a la HTTP::Request::Common) for the parameter key-value pairs.
+    This allows multiple values to be sent for the same key.
+
 0.8  Jul 2005
   - Improved error handling.  $EVDB::API::errcode now provides
     the machine-readable error, while $EVDB::API::errstr

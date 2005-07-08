@@ -2,7 +2,7 @@ use ExtUtils::MakeMaker;
 
 WriteMakefile(
     'NAME'       => 'EVDB::API',
-    'VERSION'    => '0.8',
+    'VERSION'    => '0.9',
     'PREREQ_PM'	 => 
     {
       'Digest::MD5'       => 0.1,

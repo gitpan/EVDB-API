@@ -13,12 +13,13 @@ EVDB::API - Perl interface to EVDB public API
   $evdb->login(user => 'harry', password => 'H0gwart$') 
     or die "Can't log in: $EVDB::API::errstr";
   
+  # call() accepts either an array ref or a hash ref.
   my $event = $evdb->call('events/get', {id => 'E0-001-000218163-6'})
     or die "Can't retrieve event: $EVDB::API::errstr";
   
   print "Title: $event->{title}\n";
 
-  my $venue = $evdb->call('venues/get', { id => $event->{venue_id} })
+  my $venue = $evdb->call('venues/get', [id => $event->{venue_id}])
     or die "Can't retrieve venue: $EVDB::API::errstr";
   
   print "Venue: $venue->{name}\n";
@@ -44,15 +45,16 @@ no warnings qw(uninitialized);
 
 use XML::Simple;
 use LWP::UserAgent;
+use HTTP::Request::Common;
 use Digest::MD5 qw(md5_hex);
 
 =head1 VERSION
 
-0.8 - July 2005
+0.9 - July 2005
 
 =cut
 
-our $VERSION = 0.8;
+our $VERSION = 0.9;
 
 our $VERBOSE = 0;
 our $DEBUG = 0;
@@ -158,36 +160,82 @@ sub call
   my $self = shift;
   
 	my $method = shift;
-	my $args = shift || {};
+	my $args = shift || [];
 	my $force_array = shift;
 
 	# Construct the method URL.
 	my $url = $self->{api_root} . '/rest/' . $method;
 	print "Calling ($url)...\n" if $VERBOSE;
 	
-	# Add the standard arguments to the list.
-  $args->{app_key}    = $self->{app_key};
-  $args->{user}       = $self->{user};
-  $args->{user_key}   = $self->{user_key};
-  
-	# Construct the POST data by encoding all the arguments.
-	my @postParts; 
-	foreach my $key (keys %{$args}) 
+	# Pre-process the arguments into a hash (for searching) and an array ref
+	# (to pass on to HTTP::Request::Common).
+	my $arg_present = {};
+	if (ref($args) eq 'ARRAY')
 	{
-	  my $name = url_encode($key);
-	  my $value = url_encode($args->{$key});
-		push(@postParts, "$name=$value");
+	  # Create a hash of the array values (assumes [foo => 'bar', baz => 1]).
+	  my %arg_present = @{$args};
+	  $arg_present = \%arg_present;
 	}
-	my $postData = join('&', @postParts);
-	print "POST: ($postData)\n" if $DEBUG;
-
+	elsif (ref($args) eq 'HASH')
+	{
+	  # Migrate the provided hash to an array ref.
+	  $arg_present = $args;
+	  my @args = %{$args};
+	  $args = \@args;
+	}
+	else
+	{
+		$errcode = 'Missing parameter';
+		$errstr  = 'Missing parameters: The second argument to call() should be an array or hash reference.';
+		return undef;
+	}
+	
+	# Add the standard arguments to the list.
+	foreach my $k ('app_key', 'user', 'user_key')
+	{
+	  if ($self->{$k} and !$arg_present->{$k})
+	  {
+      push @{$args}, $k, $self->{$k};
+    }
+  }
+  
+  # If one of the arguments is a file, set up the Common-friendly 
+  # file indicator field and set the content-type.
+  my $content_type = '';
+  foreach my $this_field (keys %{$arg_present})
+  {
+    # Any argument with a name that ends in "_file" is a file.
+    if ($this_field =~ /_file$/)
+    {
+      $content_type = 'form-data';
+      next if ref($arg_present->{$this_field}) eq 'ARRAY'; 
+      my $file = 
+      [
+        $arg_present->{$this_field},
+      ];
+      
+      # Replace the original argument with the file indicator.
+      $arg_present->{$this_field} = $file;
+      my $last_arg = scalar(@{$args}) - 1;
+      ARG: for my $i (0..$last_arg)
+      {
+        if ($args->[$i] eq $this_field)
+        {
+          # If this is the right arg, replace the item after it.
+          splice(@{$args}, $i + 1, 1, $file);
+          last ARG;
+        }
+      }
+    }
+  }
+  
 	# Fetch the data using the POST method.
 	my $ua = $self->{user_agent};
-	my $request = HTTP::Request->new(POST => $url);
-	$request->content_type('application/x-www-form-urlencoded');
-	$request->content($postData);
 	
-	my $response = $ua->request($request);
+	my $response = $ua->request(POST $url, 
+	  'Content-type' => $content_type, 
+	  'Content' => $args,
+	);
 	unless ($response->is_success) 
 	{
 		$errcode = $response->code;
