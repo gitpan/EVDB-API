@@ -33,7 +33,14 @@ See http://api.evdb.com/ for details.
 
 =head1 AUTHOR
 
-Copyright 2005 EVDB, Inc. All rights reserved.
+Copyright 2006 Eventful, Inc. All rights reserved.
+
+You may distribute under the terms of either the GNU General Public License or the Artistic License, as specified in the Perl README file.
+
+=head1 ACKNOWLEDGEMENTS
+
+Special thanks to Daniel Westermann-Clark for adding support for "flavors" of 
+plug-in parsers.  Visit Podbop.org to see other cool things made by Daniel.
 
 =cut
 
@@ -43,34 +50,42 @@ use strict;
 use warnings;
 no warnings qw(uninitialized);
 
-use XML::Simple;
+use Carp;
 use LWP::UserAgent;
 use HTTP::Request::Common;
 use Digest::MD5 qw(md5_hex);
+use Module::Pluggable::Object;
 
 =head1 VERSION
 
-0.9 - July 2005
+0.99 - August 2006
 
 =cut
 
-our $VERSION = 0.9;
+our $VERSION = 0.99;
 
 our $VERBOSE = 0;
 our $DEBUG = 0;
 
 our $default_api_server = 'http://api.evdb.com';
+our $default_flavor = 'rest';
 
 our $errcode;
 our $errstr;
 
 =head1 CLASS METHODS
 
-=item C(new)
+=head2 new
   
   $evdb = EVDB::API->new(app_key => $app_key);
 
 Creates a new API object. Requires a valid app_key as provided by EVDB.
+
+You can also specify an API "flavor", such as C<yaml>, to use a different format.
+
+  $evdb = EVDB::API->new(app_key => $app_key, flavor => 'yaml');
+
+Valid flavors are C<rest>, C<yaml>, and C<json>.
 
 =cut
 
@@ -96,17 +111,46 @@ sub new
   
   bless $self, $class;
   
+  my $flavor = $params{flavor} || $default_flavor;
+  $self->{parser} = $self->_find_parser($flavor);
+  croak "No parser found for flavor [$flavor]"
+    unless $self->{parser};
+
   # Create an LWP user agent for later use.
   $self->{user_agent} = LWP::UserAgent->new(
-		agent => "EVDB_API_Perl_Wrapper/$VERSION",
-	);
+    agent => "EVDB_API_Perl_Wrapper/$VERSION-$flavor",
+  );
   
   return $self;
 }
 
+# Attempt to find a parser for the specified API flavor. 
+# Returns the package name if one is found.
+sub _find_parser
+{
+  my ($self, $requested_flavor) = @_;
+
+  # Based on Catalyst::Plugin::ConfigLoader
+  my $finder = Module::Pluggable::Object->new(
+    search_path => [ __PACKAGE__ ],
+    require     => 1,
+  );
+
+  my $parser;
+  foreach my $plugin ($finder->plugins) {
+    my $flavor = $plugin->flavor;
+    if ($flavor eq $requested_flavor) {
+      $parser = $plugin;
+    }
+  }
+
+  return $parser;
+}
+
+
 =head1 OBJECT METHODS
 
-=item C<login>
+=head2 login
 
   $evdb->login(user => $username, password => $password);
   $evdb->login(user => $username, password_md5 => $password_md5);
@@ -147,11 +191,11 @@ sub login
   return 1;
 }
 
-=item C<call>
+=head2 call
 
-  $xml_ref = $evdb->call($method, \%arguments, [$force_array]);
+  $data = $evdb->call($method, \%arguments, [$force_array]);
 
-Calls the specified method with the given arguments and any previous authentication information (including app_key).  Returns a data structure processed through XML::Simple.
+Calls the specified method with the given arguments and any previous authentication information (including C<app_key>).  Returns a hash reference containing the results.
 
 =cut
 
@@ -159,42 +203,179 @@ sub call
 {
   my $self = shift;
   
-	my $method = shift;
-	my $args = shift || [];
-	my $force_array = shift;
+  my $method = shift;
+  my $args = shift || [];
+  my $force_array = shift;
 
-	# Construct the method URL.
-	my $url = $self->{api_root} . '/rest/' . $method;
-	print "Calling ($url)...\n" if $VERBOSE;
-	
-	# Pre-process the arguments into a hash (for searching) and an array ref
-	# (to pass on to HTTP::Request::Common).
-	my $arg_present = {};
-	if (ref($args) eq 'ARRAY')
-	{
-	  # Create a hash of the array values (assumes [foo => 'bar', baz => 1]).
-	  my %arg_present = @{$args};
-	  $arg_present = \%arg_present;
-	}
-	elsif (ref($args) eq 'HASH')
-	{
-	  # Migrate the provided hash to an array ref.
-	  $arg_present = $args;
-	  my @args = %{$args};
-	  $args = \@args;
-	}
-	else
-	{
-		$errcode = 'Missing parameter';
-		$errstr  = 'Missing parameters: The second argument to call() should be an array or hash reference.';
-		return undef;
-	}
-	
-	# Add the standard arguments to the list.
-	foreach my $k ('app_key', 'user', 'user_key')
-	{
-	  if ($self->{$k} and !$arg_present->{$k})
-	  {
+  # Remove any leading slash from the method name.
+  $method =~ s%^/%%;
+
+  # If we have no force_array, see if we have one for this method.
+  if ($self->{parser}->flavor eq 'rest' and !$force_array) {
+
+    # The following code is automatically generated.  Edit 
+    #   /main/trunk/evdb/public_api/force_array/force_array.conf 
+    # and run 
+    #   /main/trunk/evdb/public_api/force_array/enforcer
+    # instead.
+    # 
+    # BEGIN REPLACE
+    if($method eq 'calendars/latest/stickers') {
+      $force_array = ['site'];
+    }
+
+    elsif($method eq 'calendars/tags/cloud') {
+      $force_array = ['tag'];
+    }
+
+    elsif($method eq 'demands/get') {
+      $force_array = ['link', 'comment', 'image', 'tag', 'event', 'member'];
+    }
+
+    elsif($method eq 'demands/latest/hottest') {
+      $force_array = ['demand', 'event'];
+    }
+
+    elsif($method eq 'demands/search') {
+      $force_array = ['demand', 'event'];
+    }
+
+    elsif($method eq 'events/get') {
+      $force_array = ['link', 'comment', 'trackback', 'image', 'parent', 'child', 'tag', 'feed', 'calendar', 'group', 'user', 'relationship', 'performer', 'rrule', 'exrule', 'rdate', 'exdate', 'date', 'category'];
+    }
+
+    elsif($method eq 'events/recurrence/list') {
+      $force_array = ['recurrence'];
+    }
+
+    elsif($method eq 'events/tags/cloud') {
+      $force_array = ['tag'];
+    }
+
+    elsif($method eq 'events/validate/hcal') {
+      $force_array = ['tag', 'event_url', 'venue_url', 'event'];
+    }
+
+    elsif($method eq 'groups/get') {
+      $force_array = ['user', 'calendar', 'link', 'comment', 'trackback', 'image', 'tag'];
+    }
+
+    elsif($method eq 'groups/search') {
+      $force_array = ['group'];
+    }
+
+    elsif($method eq 'groups/users/list') {
+      $force_array = ['user'];
+    }
+
+    elsif($method eq 'internal/events/submissions/pending') {
+      $force_array = ['submission'];
+    }
+
+    elsif($method eq 'internal/events/submissions/set_status') {
+      $force_array = ['submission'];
+    }
+
+    elsif($method eq 'internal/events/submissions/status') {
+      $force_array = ['target'];
+    }
+
+    elsif($method eq 'internal/submissions/targets') {
+      $force_array = ['target'];
+    }
+
+    elsif($method eq 'performers/demands/list') {
+      $force_array = ['demand'];
+    }
+
+    elsif($method eq 'performers/get') {
+      $force_array = ['link', 'comment', 'image', 'tag', 'event', 'demand', 'trackback'];
+    }
+
+    elsif($method eq 'performers/search') {
+      $force_array = ['performer'];
+    }
+
+    elsif($method eq 'users/calendars/get') {
+      $force_array = ['rule', 'feed'];
+    }
+
+    elsif($method eq 'users/calendars/list') {
+      $force_array = ['calendar'];
+    }
+
+    elsif($method eq 'users/comments/get') {
+      $force_array = ['comment'];
+    }
+
+    elsif($method eq 'users/events/recent') {
+      $force_array = ['event'];
+    }
+
+    elsif($method eq 'users/get') {
+      $force_array = ['site', 'im_account', 'event', 'venue', 'performer', 'comment', 'trackback', 'calendar', 'locale', 'link', 'event'];
+    }
+
+    elsif($method eq 'users/groups/list') {
+      $force_array = ['group'];
+    }
+
+    elsif($method eq 'users/search') {
+      $force_array = ['user'];
+    }
+
+    elsif($method eq 'users/venues/get') {
+      $force_array = ['user_venue'];
+    }
+
+    elsif($method eq 'venues/get') {
+      $force_array = ['link', 'comment', 'trackback', 'image', 'parent', 'child', 'event', 'tag', 'feed', 'calendar', 'group'];
+    }
+
+    elsif($method eq 'venues/tags/cloud') {
+      $force_array = ['tag'];
+    }
+
+    else {
+      $force_array = ['event', 'venue', 'comment', 'trackback', 'calendar', 'group', 'user', 'performer', 'member'];
+    }
+
+    # END REPLACE
+
+  }
+
+  # Construct the method URL.
+	my $url = join '/', $self->{api_root}, $self->{parser}->flavor, $method;
+  print "Calling ($url)...\n" if $VERBOSE;
+  
+  # Pre-process the arguments into a hash (for searching) and an array ref
+  # (to pass on to HTTP::Request::Common).
+  my $arg_present = {};
+  if (ref($args) eq 'ARRAY')
+  {
+    # Create a hash of the array values (assumes [foo => 'bar', baz => 1]).
+    my %arg_present = @{$args};
+    $arg_present = \%arg_present;
+  }
+  elsif (ref($args) eq 'HASH')
+  {
+    # Migrate the provided hash to an array ref.
+    $arg_present = $args;
+    my @args = %{$args};
+    $args = \@args;
+  }
+  else
+  {
+    $errcode = 'Missing parameter';
+    $errstr  = 'Missing parameters: The second argument to call() should be an array or hash reference.';
+    return undef;
+  }
+  
+  # Add the standard arguments to the list.
+  foreach my $k ('app_key', 'user', 'user_key')
+  {
+    if ($self->{$k} and !$arg_present->{$k})
+    {
       push @{$args}, $k, $self->{$k};
     }
   }
@@ -229,52 +410,62 @@ sub call
     }
   }
   
-	# Fetch the data using the POST method.
-	my $ua = $self->{user_agent};
-	
-	my $response = $ua->request(POST $url, 
-	  'Content-type' => $content_type, 
-	  'Content' => $args,
-	);
-	unless ($response->is_success) 
-	{
-		$errcode = $response->code;
-		$errstr  = $response->code . ': ' . $response->message;
-		return undef;
-	}
-	
-	my $xml = $self->{response_xml} = $response->content();
+  # Fetch the data using the POST method.
+  my $ua = $self->{user_agent};
+  
+  my $response = $ua->request(POST $url, 
+    'Content-type' => $content_type, 
+    'Content' => $args,
+  );
+  unless ($response->is_success) 
+  {
+    $errcode = $response->code;
+    $errstr  = $response->code . ': ' . $response->message;
+    return undef;
+  }
+  
+  $self->{response_content} = $response->content();
+  my $data;
+  
+  my $ctype = $self->{parser}->ctype;
+  if ($response->header('Content-Type') =~ m/$ctype/i)
+  {
+    # Parse the response into a Perl data structure.
+    if ($self->{parser}->flavor eq 'rest')
+    {
+      # Maintain backwards compatibility.
+      $self->{response_xml} = $self->{response_content};
+    }
+    $data = $self->{response_data} = $self->{parser}->parse($self->{response_content}, $force_array);
+    
+    # Check for errors.
+    if ($data->{string})
+    {
+      $errcode = $data->{string};
+      $errstr  = $data->{string} . ": " .$data->{description};
+      print "\n", $self->{response_content}, "\n" if $DEBUG;
+      return undef;
+    }
+  }
+  else
+  {
+    print "Content-type is: ", $response->header('Content-Type'), "\n";
+    $data = $self->{response_content};
+  }
 
-	# Now parse the XML response into a Perl data structure.
-	my $xs = new XML::Simple(
-		ForceArray => $force_array,
-		KeyAttr => '',
-		SuppressEmpty => '',
-	);
-	my $data = $self->{response_data} = $xs->XMLin($xml);
-	
-	# Check for errors.
-	if ($data->{string})
-	{
-	  $errcode = $data->{string};
-	  $errstr  = $data->{string} . ": " .$data->{description};
-	  print "\n", $xml, "\n" if $DEBUG;
-	  return undef;
-	}
-
-	return $data;
+  return $data;
 }
 
 # Copied shamelessly from CGI::Minimal.
 sub url_encode 
 {
-	my $s = shift;
-	return '' unless defined($s);
-	
-	# Filter out any URL-unfriendly characters.
-	$s =~ s/([^-_.a-zA-Z0-9])/"\%".unpack("H",$1).unpack("h",$1)/egs;
-	
-	return $s;
+  my $s = shift;
+  return '' unless defined($s);
+  
+  # Filter out any URL-unfriendly characters.
+  $s =~ s/([^-_.a-zA-Z0-9])/"\%".unpack("H",$1).unpack("h",$1)/egs;
+  
+  return $s;
 }
 
 1;

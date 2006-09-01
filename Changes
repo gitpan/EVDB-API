@@ -1,5 +1,14 @@
 Revision history for EVDB::API
 
+0.99 Aug 2006
+  - Structural updates to allow EVDB::API to use the YAML or JSON "flavors"
+    provided by api.evdb.com.  Also provides support for XML::Twig parsing,
+    which may perform better on some systems. (Thanks, Daniel!)
+  - Added a default set of force_array options for common API methods.
+    This set will probably be split out into another package with 
+    more frequent updates.
+  - Last revision (hopefully) before releasing 1.0 and finding a permanent home.
+
 0.9  Jul 2005
   - Updated call() to accept file upload fields.  Specifically, any parameter
     that ends with "_file" will be treated as a local filename and uploaded
